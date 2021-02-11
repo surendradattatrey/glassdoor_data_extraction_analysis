@@ -1,0 +1,281 @@
+# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Jun 27 09:17:11 2019
+
+@author: shruti_goel
+"""
+
+import pandas as pd
+import numpy as np
+import random
+import matplotlib
+from wordcloud import WordCloud, STOPWORDS
+import matplotlib.pyplot as plt
+from collections import Counter
+from nltk import pos_tag, sent_tokenize, word_tokenize, BigramAssocMeasures,\
+    BigramCollocationFinder, TrigramAssocMeasures, TrigramCollocationFinder
+import re
+import nltk
+import os    
+from collections import Counter
+from nltk.util import ngrams 
+df = pd.read_excel(r"C:\Users\shruti_goel\Desktop\S&P\New folder\June\Performance_Development_Items.xlsx",
+                       encoding = "ISO-8859-1",skiprows=4)    
+
+#dev_df = df.loc[(df.Category =='Opportunity') |( df.Category =='Strength')]
+dev_df = df.loc[(df.Category =='Opportunity')]
+
+group_df =  pd.DataFrame(dev_df.groupby(['Segment','Group',
+                                         'Business Unit Level 1','Category'])\
+                                        ['Additional Information'])
+
+#group_df.to_excel('group_df.xlsx')
+
+Segment = []
+Group = []
+Business_Unit_Level_1 =[]
+Category=[]
+
+for val in group_df[0][:,]:
+    Segment.append(val[0])
+    Group.append(val[1])
+    Business_Unit_Level_1.append(val[2])
+    Category.append(val[3])
+    
+group_df['Segment'] = Segment
+group_df['Segment'] = group_df['Segment'].map(lambda x: re.sub(r'/', '_', str(x)))
+group_df['Group'] = Group
+group_df['Group'] = group_df['Group'].map(lambda x: re.sub(r'/', '_', str(x)))
+group_df['Category'] = Category
+group_df['Category'] = group_df['Category'].map(lambda x: re.sub(r'/', '_', str(x)))
+group_df['Business_Unit_Level_1'] = Business_Unit_Level_1
+group_df['Business_Unit_Level_1'] = group_df['Business_Unit_Level_1'].map(lambda x: re.sub(r'/', '_', str(x)))
+group_df['Additional Information'] = group_df[1].apply(list)
+del group_df[0],group_df[1]
+
+
+
+stopwords = set(STOPWORDS)
+stopwords.update(["want", "will", "member","n1","improve","try","continue",
+                      "...",".","/",",","'ll","nan","-",":","strength","always",
+                      's','&','good','new','•','1.','p','set','t',"platts","take",
+                      '(','need','n1','i','ni',' ','last','year','brief',
+                      'norganization','nwil','n','nw','tea','w',"\n","\\n",
+                      'that','tha','func','re','andor','abou','must','sp','make',
+                      'spgi','among','able','spg','s&p','making','sure'])
+                      
+                      
+
+group_df['Additional Information'] = group_df['Additional Information'].map(lambda x: re.sub(r'\\n', ' ', str(x)))
+group_df['Additional Information'] = group_df['Additional Information'].map(lambda x: re.sub(r'[^a-zA-Z\ ]', '', str(x)))
+
+group_df['tokenized_sents'] = group_df.apply(lambda row: nltk.word_tokenize(row['Additional Information'].lower()), axis=1)
+
+
+
+def word_cloud(Segment,Group,Business_Unit_Level_1,Category):
+              
+    temp_df = group_df[['Segment','Group','Business_Unit_Level_1','Additional Information','Category']]\
+        [(group_df["Segment"] == Segment) & 
+         (group_df["Group"] == Group) &
+         (group_df["Business_Unit_Level_1"] == Business_Unit_Level_1)&
+         (group_df["Category"] ==Category)
+         ]
+#    print(temp_df.head(5))    
+    temp_text = temp_df["Additional Information"].values[0].lower() 
+    token =  word_tokenize(temp_text)
+    filtered_sentence = [w for w in token if not w in stopwords] 
+    text = " ".join(filtered_sentence)
+    wordcloud = WordCloud(stopwords=stopwords,collocations=True, background_color="white",
+                          random_state = 15,colormap=matplotlib.cm.inferno)\
+                          .generate(text)
+    plt.figure(figsize=(10, 10))
+    plt.imshow(wordcloud, interpolation='bilinear')
+    plt.title("Unigram-Gram "+str(Segment)+' and '+str(Group)+' and '+str(Business_Unit_Level_1)+' and '+str(Category),fontsize=20)
+    plt.axis("off")
+    plt.show()
+    wordcloud.to_file(r"C:\Users\shruti_goel\Desktop\fun"+"\\"+"Uni-Gram "+str(Segment)+' and '+str(Group)+' and '+str(Business_Unit_Level_1)+' and '+str(Category)+'.png')
+
+  
+def bi_tri_grams(Segment,Group,Business_Unit_Level_1,Category):
+    
+    temp_df = group_df[['Segment','Group','Business_Unit_Level_1','Additional Information']]\
+        [(group_df["Segment"] == Segment) & 
+         (group_df["Group"] == Group) &
+         (group_df["Business_Unit_Level_1"] == Business_Unit_Level_1)&
+         (group_df["Category"] ==Category)    
+         ]
+        
+    temp_text = temp_df["Additional Information"].values[0].lower() 
+    token =  word_tokenize(temp_text)
+    filtered_sentence = [w for w in token if not w in stopwords] 
+    text = " ".join(filtered_sentence) 
+ 
+    bigram_measures = BigramAssocMeasures()
+    trigram_measures = TrigramAssocMeasures()
+
+    finder = BigramCollocationFinder.from_words(text.split(" "))
+    finder.apply_freq_filter(1)
+
+    bigrams = {" ".join(words): "_".join(words)
+            for words in finder.above_score(bigram_measures.likelihood_ratio,min_score=0)}
+    finder_2 = TrigramCollocationFinder.from_words(text.split())
+    finder_2.apply_freq_filter(1)
+
+    trigrams = {" ".join(words): "_".join(words)
+        for words in finder_2.above_score(trigram_measures.likelihood_ratio,min_score=0)}
+
+    return bigrams,trigrams
+
+
+def word_cloud_bigram(Segment,Group,Business_Unit_Level_1,Category):
+    try:
+        bigrams,_ = bi_tri_grams(Segment,Group,Business_Unit_Level_1,Category)
+        bi_gram = []
+        for t in bigrams.values():
+            bi_gram.append(t)
+        bi_gram_text = " ".join(bi_gram)   
+        wordcloud = WordCloud(stopwords=stopwords,collocations=True, background_color="white",
+                                  random_state = 15,colormap=matplotlib.cm.inferno).generate(bi_gram_text)
+        plt.figure(figsize=(10,10))
+        plt.imshow(wordcloud, interpolation='bilinear')
+        plt.title("Bi-Gram "+str(Segment)+' and '+str(Group)+' and '+str(Business_Unit_Level_1)+' and '+str(Category),fontsize=20)
+        plt.axis("off")
+        plt.show()
+        wordcloud.to_file(r"C:\Users\shruti_goel\Desktop\fun"+"\\"+"Bi-Gram "+str(Segment)+' and '+str(Group)+' and '+str(Business_Unit_Level_1)+' and '+str(Category)+'.png')
+
+    except Exception as e:
+        print(e)
+        
+
+def word_cloud_trigram(Segment,Group,Business_Unit_Level_1,Category):
+    try:
+        _,trigrams = bi_tri_grams(Segment,Group,Business_Unit_Level_1,Category)
+        ti_gram = []
+        for t in trigrams.values():
+            ti_gram.append(t)
+        ti_gram_text = " ".join(ti_gram)   
+        wordcloud = WordCloud(stopwords=stopwords,collocations=True, background_color="white",
+                                  random_state = 15,colormap=matplotlib.cm.inferno).generate(ti_gram_text)
+        
+        plt.figure(figsize=(10, 10))
+        plt.imshow(wordcloud, interpolation='bilinear')
+        plt.title("Tri-Gram "+str(Segment)+' and '+str(Group)+' and '+str(Business_Unit_Level_1)+' and '+str(Category),fontsize=20)
+        plt.axis("off")
+        plt.show()
+        wordcloud.to_file(r"C:\Users\shruti_goel\Desktop\fun"+"\\"+"Tri-Gram "+str(Segment)+' and '+str(Group)+' and '+str(Business_Unit_Level_1)+' and '+str(Category)+'.png')
+    except Exception as e:
+        print(e)
+#cat_list = ["Opportunity","Strength"]
+'''
+for row_num in range(len(group_df)):
+        Segment,Group,Category,Business_Unit_Level_1,tokenized_sents = group_df.iloc[row_num,0],group_df.iloc[row_num,1],group_df.iloc[row_num,2],group_df.iloc[row_num,3],group_df.iloc[row_num,5]
+#        word_cloud(Segment,Group,Business_Unit_Level_1,Category)
+        word_cloud_bigram(Segment,Group,Business_Unit_Level_1,Category)
+#        word_cloud_trigram(Segment,Group,Business_Unit_Level_1,Category)
+'''    
+
+#temp_df = group_df[['Segment','Group','Business_Unit_Level_1','Additional Information']]\
+#    [(group_df["Segment"] == 'CORPORATE') & 
+#     (group_df["Group"] == 'CORPORATE') &
+#     (group_df["Business_Unit_Level_1"] == 'AUDIT')&
+#     (group_df["Category"] =='Opportunity')    
+#     ]
+#ff = list(group_df[(group_df.Segment == 'PLATTS')&(group_df.Group=='PRODUCT')&(group_df.Business_Unit_Level_1=='PLATTS MARKET STRUCTURE')&(group_df.Category =='Opportunity')]["tokenized_sents"].values[0])
+#filtered_sentence = [w for w in ff if not w in stopwords] 
+#text = " ".join(filtered_sentence)        
+##Get better understanding of Platts and S&P Global.
+#        (df.Category =='Opportunity')
+
+
+def word_freq_unigram(Segment,Group,Business_Unit_Level_1,Category='Opportunity'):
+    
+    temp_df = group_df[['Segment','Group','Business_Unit_Level_1','Additional Information','Category']]\
+    [(group_df["Segment"] == Segment) & 
+     (group_df["Group"] == Group) &
+     (group_df["Business_Unit_Level_1"] == Business_Unit_Level_1)&
+     (group_df["Category"] ==Category)
+     ]
+
+        
+    temp_text = temp_df["Additional Information"].values[0].lower() 
+    token =  word_tokenize(temp_text)
+    filtered_sentence = [w for w in token if not w in stopwords] 
+#    text = " ".join(filtered_sentence)   
+    words = Counter()
+    words.update(filtered_sentence)
+    return(words.most_common()[:20])
+
+word_freq_unigram('CORPORATE','CORPORATE','AUDIT')
+
+
+
+#
+#text = "What Artificial Intelligence AI is a field that has a long history but is still constantly and actively growing and changing In this item Ill try to learn the basics of modern AI as well as some of the representative applications of AI Along the way I also hope to excite myself about the numerous applications and huge possibilities in the field of AI which continues to expand human capability beyond our imagination ub Why Learning AI will enhance my skillset in a way that I will be able to identify the repetitive processes in our department and also in other departments and then automating the repetitive processes   How By taking the information from the belowmentioned places I will be able to learn the basics of AI and I will be able to apply the learning somewhere in our department Completing courses from LX to learn related applications Gathering Updates on AI by regularly visiting Hub Page Get information by talking to people who already have knowledge about AI  Action Items I will at least complete modulecourses on two applications of AI before year end I will try to give one idea in one half relating to automation or lean or comprehensiveness What Two main things contribute to selfconfidence selfefficacy and selfesteem We gain a sense of selfefficacy when we see ourselves and others similar to ourselves mastering skills and achieving goals that matter in those skill areas This is the confidence that if we learn and work hard in a particular area well succeed and its this type of confidence that leads people to accept difficult challenges and persist in the face of setbacks This overlaps with the idea of SelfEsteem which is a more general sense that we can cope with whats going on in our lives and that we have a right to be happy Partly this comes from a feeling that the people around us approve of us which we may or may not be able to control However it also comes from the sense that we are behaving virtuously that were competent at what we do and that we can compete successfully when we put our minds to it ub ub Why I would like to Improve my Reading Writing Speaking and Listening Communication skills that will help me ubCommunicate with conviction consistency and clarity  How   I will try to develop the Listening abilities by regularly listening to news documentaries and other useful media available to me and this will eventually help me understand people well around me ub   Who you are talking to matters I will try to interact with people on different levels to increase the conversation ethics Usually all good leaders have this quality   I will always recheck my messageemails before I hit send ub   I will write things down so that I develop the habit of learning   I will be brief yet specific in my messages emails and conversations ub   I will try to maintain a positive attitude and smile It will help me making my network strong around me ub  Action Items I will try to join any ERG this year and try to actively participate in its operations ubI will try to replicate my learningsinformation with my team within a week Introduction to Automation Machine Learning and Artificial Intelligence Introduction to Blue Prism Undertake Six Sigma Green Belt Course at Villanova University Successful Delegation Supervise and Encourage I have  a Developed product knowledge bUnderstood the value we bring to the customers cUse customer knowledge to build solutions d Worked towards steps to customer satisfaction through service excellence I have  aBecame clear concise and professional in communication bBeen comfortable with arguments and disagreements c Remain composed positive and tactful during ambiguous or stressful times d Respected alternative opinions and viewpoints e Seek to find common ground with others to build agreement f Broaden thought process Pursue additional training through company resources to increase efficiency and knowledge base relating to job performance and company roles ie  Salesforce training through Trailhead Be able to validate processes and requests to ensure proper execution on requests from Clients internal and external and provide audit protection to the company as new processes and procedures are developed This is an area that I want to improve upon in  and something that I tried to account for in both my objective setting and those of my team I want to be fully comfortable in making sure that my team is fully understanding of the high level of customer service that we need to give fully resolving items that come from our clients the first time without additional escalations to me It is difficult at times to fully respond to every item in a timely manner so by being confident that my team is handling things is a very important step in being able to devote time to Mercury Order Management and Collections Another item that I want to develop this year is being fully confident in challenging the team as well as some of the other groups that I interact with on a daily basis As an example making sure that I am respectfully able to disagree with the approach that some of the other order management managers take on order processing and handling queries as well as challenging the commercial team when they come to us with items that they feel order management has failed I always gather all of the upfront research and detail out the issue and resolution steps but I am not always sure that the teams are listening and taking the appropriate actions based off of my response Delegate further to not only up skill others but also to enable to focus on other areas KYC  improving this in the collections space internally and externally  attend selfdevelopmental classes offered by SPGI As a Team Lead for OTC  Collections it is my responsibility to learn the business of all divisions of SP Global The role requires me to enhance my knowledge with the processes in relation to collections and make sure that all concerns by the team or by the clients are being addressed accordingly Access Databases  Work with team and stakeholders in GBS MI Commercial and MI Technology to complete the MI Multiyear Ramp Project   Complete internal corporate training for Advanced Communication Skills in April    Improve meeting management skills by leading meetings for Mercury training and other projects as assigned Look for other opportunities in the Learning Exchange to further enhance these skills  Smartsheet Webinar  Communication Skills course in April   Charlottesville Office  Project Management course  TBD Work with the Tax and QlikView teams to build the tax QlikView Dashboard Gain knowledge by attending all learning sessions completing the online Zuroa training and provide feedback upon testing the new system if necessary Continue to focus on Six Sigma mythology and work with management to convert projects into the six sigma mythology to provide transparence to my department Set a monthly meeting with different colleagues to obtain and learn from them how to operate the system that I need to learn I am interested in improving my overall knowledge and I would like to have more experience in all areas of my department to be able to collaborate more with all members of my region Set a monthly meeting with different colleagues to obtain and learn from them how to operate the system that I need to learn I am interested in improving my overall knowledge and I would like to have more experience in all areas of my department to be able to collaborate more with all members of my region I will become proficient in the Agile methodology and the VSTS tool to ensure that department projects are adhered to and deliverables are met Work diligently on improving communication to others as well as understanding communications to myself by engaging in the Advanced Communication Skills course  April   Continue to work on ways to increase service provided to both internal and external customers by decreasing TAT for contract distribution and the amount of time required to respond to incoming email inquiries by attending the Project Management Course  TBD and Effective Time and Priority Management course  April   Continue to develop working relationships with other SP entities as resources Continue to monitor aging reports for current receivables Learn new Akritiv system for report building  To reduce the number of days to complete a customer request by one day for all Sales orders  To continuously attend all customer emails in our SPDJI Mailbox on a daily basis and achieve a resolution with a maximum period of  days for complicated billing issues and requests Work with Jude on how the AP processes are working in APAC meet and greet with the APAC controllers to assist in AP concernsissues Online course Generating Creative and Innovative Ideas Verifying and Building on Ideas Reviewing processes Suggesting ideas and providing information to the offshore teams for them to understand the checks OTC do Business Writing Know Your Readers and Your Purpose  this will help when I need to explain a task or situation to someone or a group of people and not have to have this double checked when I am unsure Focus on providing output with zero error Think through obstacles on the performance and identify ways to remove or reduce these Work on more detailed steps on each account and apply it on complex account Communicate with teammates if facing challenges on handling an account Identify ways that will simplify the process Seek out and complete internal andor external training on improving time management skills To expand my audit knowledge I will be participating in the Guest Audit Program  By participating in a an Internal Audit with Global Risk Assurance I will gain expanded knowledge and insight into another part of the Company Six Sigma andor Agile project training and utilizing the project management skills to create process enhancements using lean techniques Crosstrain in all areas within group to be fully functional on most to all processes As a WINS active member I would like to keep attending the internal meeting and also the workshop held by them to suppelemt my daily limited stakeholdes within the company As a Sr Collector it is my role to thrive to be a better role model to my colleagues It is expected of me to deliver the best quality of work one can offer As such I have to ensure that I learn and develop the fundamentals of leadership namely selfawareness communication influence and learning agility  In pursuit of excellence I aim to improve on character building and focus on punctuality and attendance I will strive to ensure that I come to office  minutes before my shift starts I will also make sure that I keep my health in check to avoid unnecessary absences  With this in mind I hope to earn respect from myself and from my colleagues Improve systems analytical skills in order to improve the compliance and workflow of the operations and support to new innervations  grow confidence in presenting to wider audience or at a senior level weather in small groups or presentations   Know the product and speak confidently about the future Since the company is going further into enhancing the automation and robotics platform it will be my goal for  to contribute positively in the project and making sure that the suggestions are based on facts which will make the procedures and processes more accurate and will take less time by eliminating waste Implementation of LEAN is also a great initiative since the company has set a goal to make sure that the processes which are time wasting should be eliminated and replaced with more accurate and time saving strategies Many different projects were conducted over the previous year and many will be undertaken in the year  therefore this is a great opportunity to reflect the skills which I think can make the project a success  Objectives Providing LEAN ideas and ideas on automation Objective is to suggest at least  LEAN ideas every month which will include both enhancement in the processes and will also eliminate waste from the current methods Ideas will include both Pathfinder and Applications enhancement I will try to achieve the targets that are assigned to me  Success Measure Productivity in hours   Efficiency   Internal EIS  Lessat peer average Monthly consistency in the goals for Q  Status Productivity in hours   Efficiency   Internal EIS   Consistency in Efficiency for Q Productivity had been increasing for the Q therefore to achieve consistency first I have to achieve the productivity goal I have managed to provide quality documents and havet received any error till the month of October Understanding and creation of the reports  time line April  Prep listing of reports that Vijay is preparing  Set up calls w Vijay to discuss  min  a call Make and Present to the ASIA Dashboard  April  Prep EMEA report July  Prep NAMER report August  Implement the new SOP requirement Karen Learning the filing system for the US s  s I am currently focusing on providing the best quality and quantity of work to set high standards of processing I like to come up with new ideas to improve routine processes  i like to pursue excellence so that i can put forward the best in me Rigidly adheres to current practices ub Takes few steps to improve customer service may rely too much on existing systems and approaches This is crucial whether youre an intern for the season or a seasoned manager If you find yourself waiting for someone else to signal or approve the next step check yourself Its up to you to keep the ball rolling Rather than waiting for a new assignment or task ask yourself what else could be done and do it "
+#n_gram = 2
+#Counter(ngrams(text.split(), n_gram)).most_common()[:10]
+#from itertools import islice, izip
+#Counter(izip(words, islice(words, 1, None)))
+
+
+def word_freq_bigram(Segment,Group,Business_Unit_Level_1,Category='Opportunity'):
+    
+    temp_df = group_df[['Segment','Group','Business_Unit_Level_1','Additional Information','Category']]\
+    [(group_df["Segment"] == Segment) & 
+     (group_df["Group"] == Group) &
+     (group_df["Business_Unit_Level_1"] == Business_Unit_Level_1)&
+     (group_df["Category"] ==Category)
+     ]
+        
+    temp_text = temp_df["Additional Information"].values[0].lower() 
+    token =  word_tokenize(temp_text)
+    filtered_sentence = [w for w in token if not w in stopwords] 
+    text = " ".join(filtered_sentence)   
+    n_gram = 2
+    bigrams_freq = Counter(ngrams(text.split(), n_gram))
+#    words = Counter()
+#    words.update(filtered_sentence)
+    return(bigrams_freq.most_common()[:20])
+word_freq_bigram('CORPORATE','CORPORATE','AUDIT')
+word_freq_bigram('S&P RATINGS SERVICES', 'STRUCTURED FINANCE', 'SF ADMINISTRATION')
+
+
+def word_freq_trigram(Segment,Group,Business_Unit_Level_1,Category='Opportunity'):
+    
+    temp_df = group_df[['Segment','Group','Business_Unit_Level_1','Additional Information','Category']]\
+    [(group_df["Segment"] == Segment) & 
+     (group_df["Group"] == Group) &
+     (group_df["Business_Unit_Level_1"] == Business_Unit_Level_1)&
+     (group_df["Category"] ==Category)
+     ]
+        
+    temp_text = temp_df["Additional Information"].values[0].lower() 
+    token =  word_tokenize(temp_text)
+    filtered_sentence = [w for w in token if not w in stopwords] 
+    text = " ".join(filtered_sentence)   
+    n_gram = 3
+    trigrams_freq = Counter(ngrams(text.split(), n_gram))
+#    words = Counter()
+#    words.update(filtered_sentence)
+    return(trigrams_freq.most_common()[:20])
+  
+    
+word_freq_trigram('CORPORATE','CORPORATE','AUDIT')
+
+
+ 
+df = pd.DataFrame({'Segment': [], 'Group': [], 'Business_Unit_Level_1': [],
+                   'Unigram':[],'Bigram':[],'Trigram':[]})
+
+for row_num in range(len(group_df)):
+        Segment,Group,Business_Unit_Level_1 =                                \
+        group_df.iloc[row_num,0],group_df.iloc[row_num,1],group_df.iloc[row_num,3]                  
+        df = df.append({'Segment': Segment, 'Group': Group, 
+                        'Business_Unit_Level_1': Business_Unit_Level_1,
+                        'Unigram':word_freq_unigram(Segment,Group,Business_Unit_Level_1),
+                        'Bigram':word_freq_bigram(Segment,Group,Business_Unit_Level_1),
+                        'Trigram':word_freq_trigram(Segment,Group,Business_Unit_Level_1)},
+                       ignore_index=True)
+        
+df.to_excel(r'C:\Users\shruti_goel\Desktop\unigram_bigram_trigram_opportunity.xlsx')
